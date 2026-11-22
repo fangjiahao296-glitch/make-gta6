@@ -1,3 +1,7 @@
+[![make.fun · gta6-01](https://make.fun/badge/gta6-01.svg)](https://make.fun/bounty/gta6-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
+[![rank](https://make.fun/badge/gta6-01/fangjiahao296-glitch/make-gta6/rank.svg)](https://make.fun/bounty/gta6-01/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
+[![reward](https://make.fun/badge/gta6-01/fangjiahao296-glitch/make-gta6/reward.svg)](https://make.fun/bounty/gta6-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
+
 # Solara Bay — A Sun-Soaked Getaway
 
 An original open-world crime game for make.fun's **Make GTA 6** bounty
@@ -6,6 +10,8 @@ steal cars, outrun the police, and finish five jobs for Marta's crew to pay
 off Leo Marin's debt. Everything here — the city, the characters, the cars,
 the story, the art, the sounds and the music — is original. Nothing comes
 from Rockstar Games or any other commercial game.
+
+Built for the [Make GTA 6 bounty on make.fun](https://make.fun/bounty/gta6-01).
 
 ## Play
 
