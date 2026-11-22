@@ -3,17 +3,124 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Block Dodger</title>
+<title>Solara Bay — A Sun-Soaked Getaway</title>
 <style>
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #11141b; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #1a2028; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
   #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
-  /* Read aloud, never shown: the status line screen readers announce. */
   #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .hidden { display: none !important; }
+  /* --- HUD --- */
+  #hud { position: fixed; inset: 0; pointer-events: none; color: #fff; z-index: 5; }
+  #top-left { position: absolute; top: 14px; left: 16px; }
+  #cash { font-size: 30px; font-weight: 800; color: #7dff9a; text-shadow: 0 2px 6px rgba(0,0,0,.7); }
+  #health-bar { width: 220px; height: 14px; background: rgba(0,0,0,.55); border: 1px solid rgba(255,255,255,.5); border-radius: 7px; margin-top: 6px; overflow: hidden; }
+  #health-fill { height: 100%; width: 100%; background: #3aa655; }
+  #health-text { font-size: 12px; color: #ddd; margin-top: 2px; text-shadow: 0 1px 3px rgba(0,0,0,.8); }
+  #stars { font-size: 26px; letter-spacing: 4px; margin-top: 4px; text-shadow: 0 2px 6px rgba(0,0,0,.8); }
+  #top-right { position: absolute; top: 14px; right: 16px; text-align: right; }
+  #minimap { width: 190px; height: 190px; border: 2px solid rgba(255,255,255,.6); border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,.5); }
+  #speed { font-size: 22px; font-weight: 700; margin-top: 6px; text-shadow: 0 2px 6px rgba(0,0,0,.8); }
+  #objective { position: absolute; bottom: 64px; left: 50%; transform: translateX(-50%); max-width: 640px; text-align: center; font-size: 17px; font-weight: 600; background: rgba(0,0,0,.55); padding: 8px 18px; border-radius: 8px; border-left: 4px solid #ff5a7a; }
+  #hint { position: absolute; bottom: 16px; left: 16px; font-size: 13px; color: rgba(255,255,255,.85); text-shadow: 0 1px 3px rgba(0,0,0,.9); }
+  #toasts { position: absolute; top: 120px; left: 50%; transform: translateX(-50%); text-align: center; }
+  .toast { background: rgba(0,0,0,.65); padding: 7px 16px; border-radius: 6px; margin-bottom: 6px; font-size: 15px; font-weight: 600; }
+  .toast.fade { opacity: 0; transition: opacity .6s; }
+  #crosshair { position: absolute; top: 50%; left: 50%; width: 22px; height: 22px; margin: -11px 0 0 -11px; display: none; }
+  #crosshair::before, #crosshair::after { content: ""; position: absolute; background: #fff; box-shadow: 0 0 4px #000; }
+  #crosshair::before { left: 10px; top: 0; width: 2px; height: 22px; }
+  #crosshair::after { top: 10px; left: 0; width: 22px; height: 2px; }
+  #damage { position: fixed; inset: 0; pointer-events: none; box-shadow: inset 0 0 90px rgba(255,0,0,0); z-index: 6; }
+  #damage.hit { animation: dmg .5s ease-out; }
+  @keyframes dmg { 0% { box-shadow: inset 0 0 90px rgba(255,0,0,.75); } 100% { box-shadow: inset 0 0 90px rgba(255,0,0,0); } }
+  #banner { position: absolute; top: 30%; left: 50%; transform: translate(-50%,-50%) scale(.9); text-align: center; opacity: 0; transition: opacity .3s, transform .3s; }
+  #banner.show { opacity: 1; transform: translate(-50%,-50%) scale(1); }
+  #banner-title { font-size: 44px; font-weight: 900; color: #ffd98a; text-shadow: 0 3px 12px rgba(0,0,0,.8); }
+  #banner-sub { font-size: 22px; font-weight: 700; color: #7dff9a; text-shadow: 0 2px 8px rgba(0,0,0,.8); }
+  #story { position: absolute; bottom: 130px; left: 50%; transform: translateX(-50%); width: 560px; max-width: 86vw; background: rgba(10,14,20,.82); border: 1px solid rgba(255,217,138,.6); border-radius: 10px; padding: 14px 20px; opacity: 0; transition: opacity .3s; }
+  #story.show { opacity: 1; }
+  #story-title { font-size: 20px; font-weight: 800; color: #ffd98a; }
+  #story-text { font-size: 15px; line-height: 1.5; color: #eee; margin-top: 4px; }
+  #story-close { margin-top: 8px; background: none; border: 1px solid #888; color: #ccc; border-radius: 6px; padding: 3px 12px; cursor: pointer; }
+  /* --- Full-screen overlays --- */
+  .overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(8,12,18,.72); z-index: 10; color: #fff; }
+  .panel { text-align: center; max-width: 640px; padding: 28px 36px; background: rgba(12,18,26,.88); border: 1px solid rgba(255,217,138,.5); border-radius: 14px; }
+  .panel h1 { margin: 0; font-size: 56px; letter-spacing: 4px; color: #ffd98a; }
+  .panel h2 { margin: 6px 0 0; font-size: 18px; font-weight: 500; color: #9fd8ff; letter-spacing: 2px; }
+  .panel p { font-size: 15px; line-height: 1.6; color: #ddd; }
+  .panel .controls { font-size: 14px; line-height: 1.9; color: #bbb; text-align: left; display: inline-block; }
+  .panel button { display: block; margin: 10px auto 0; min-width: 260px; padding: 12px 20px; font-size: 17px; font-weight: 700; color: #14100a; background: #ffd98a; border: none; border-radius: 8px; cursor: pointer; }
+  .panel button.secondary { background: transparent; color: #ffd98a; border: 1px solid #ffd98a; }
+  .panel button:hover { filter: brightness(1.1); }
+  #title-save { font-size: 14px; color: #7dff9a; margin-top: 8px; }
 </style>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.min.js" } }
+</script>
 </head>
 <body>
-<canvas id="game" aria-label="Block Dodger: move the paddle left and right to dodge falling blocks and catch coins"></canvas>
+<canvas id="game" aria-label="Solara Bay: drive and walk around a sun-soaked coastal city, steal cars, dodge the police and finish five jobs"></canvas>
 <p id="status" role="status" aria-live="polite"></p>
+<div id="damage"></div>
+
+<div id="hud" class="hidden">
+  <div id="top-left">
+    <div id="cash">$0</div>
+    <div id="health-bar"><div id="health-fill"></div></div>
+    <div id="health-text">100</div>
+    <div id="stars">☆☆☆☆☆</div>
+  </div>
+  <div id="top-right">
+    <canvas id="minimap" width="190" height="190"></canvas>
+    <div id="speed"></div>
+  </div>
+  <div id="toasts"></div>
+  <div id="banner"><div id="banner-title"></div><div id="banner-sub"></div></div>
+  <div id="story"><div id="story-title"></div><div id="story-text"></div><button id="story-close">OK</button></div>
+  <div id="objective"></div>
+  <div id="crosshair"></div>
+  <div id="hint"></div>
+</div>
+
+<div id="title-screen" class="overlay">
+  <div class="panel">
+    <h1 id="title-name">SOLARA BAY</h1>
+    <h2 id="title-sub">A sun-soaked getaway</h2>
+    <p id="title-story"></p>
+    <div class="controls">
+      WASD — walk / drive &nbsp;·&nbsp; Shift — run<br>
+      Space — jump / handbrake &nbsp;·&nbsp; E — enter &amp; steal cars<br>
+      Mouse — look (click to lock) &nbsp;·&nbsp; Left click — shoot<br>
+      H — horn &nbsp;·&nbsp; M — mute &nbsp;·&nbsp; P — pause
+    </div>
+    <div id="how-panel" class="hidden">
+      <p>Steal cars, lose the cops, and finish all five jobs for Marta's crew. Wanted stars bring more police. Cash pickups and job payouts are saved automatically.</p>
+    </div>
+    <button id="btn-continue">Continue</button>
+    <div id="title-save" class="hidden"></div>
+    <button id="btn-new">New Game</button>
+    <button id="btn-how" class="secondary">How to play</button>
+  </div>
+</div>
+
+<div id="pause-screen" class="overlay hidden">
+  <div class="panel">
+    <h1>Paused</h1>
+    <p>Solara Bay waits for no one — except right now.</p>
+    <button id="btn-resume">Resume</button>
+    <button id="btn-mute" class="secondary">Sound: on</button>
+    <button id="btn-quit-title" class="secondary">Save &amp; quit to title</button>
+  </div>
+</div>
+
+<div id="end-screen" class="overlay hidden">
+  <div class="panel">
+    <h1 id="end-title">BUSTED</h1>
+    <p id="end-text"></p>
+    <button id="btn-respawn">Respawn at the hospital</button>
+    <button id="btn-end-quit" class="secondary">Quit to title</button>
+  </div>
+</div>
+
 <script type="module" src="./src/main.js"></script>
 </body>
 </html>

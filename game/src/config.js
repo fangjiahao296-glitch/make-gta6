@@ -1,61 +1,123 @@
-// Every tuning number and colour in one place. The playfield is a fixed 1280x720 logical area;
-// the renderer scales it to the window, so no rule below depends on the screen size.
-
-export const FIELD = { width: 1280, height: 720, groundY: 664 };
-
-/** The simulation's fixed step, in seconds: 60 updates a second whatever the display's rate. */
+// Solara Bay: a sun-soaked coastal city, all original. Every name, place and
+// character below is invented for this game; nothing comes from Rockstar or GTA.
 export const STEP = 1 / 60;
+export const SAVE_KEY = 'solara-bay-save-v1';
+export const GAME_TITLE = 'SOLARA BAY';
+export const GAME_SUBTITLE = 'A sun-soaked getaway';
+
+// City grid: roads run on a square lattice, buildings fill the blocks between.
+export const CITY = {
+  pitch: 58, // road centre to road centre
+  roadWidth: 14,
+  roadHalf: 7,
+  lane: 3.5, // right-hand lane offset from a road centre line
+  blocks: 8, // blocks across (road indices -4..4)
+  ground: 620, // ground plane size
+  beachZ: 250, // sand starts here (south edge, +z)
+  waterZ: 288, // water starts here
+};
 
 export const PLAYER = {
-  width: 72,
-  height: 24,
-  speed: 560,
-  invulnerable: 1.5,
+  radius: 0.55,
+  walkSpeed: 5.2,
+  runSpeed: 9.0,
+  accel: 40,
+  jumpSpeed: 7.5,
+  gravity: 22,
+  health: 100,
 };
 
-export const LIVES = 3;
-
-export const BLOCK = {
-  minWidth: 40,
-  maxWidth: 110,
-  height: 36,
-  speed: 240,
-  speedPerLevel: 30,
-  speedJitter: 90,
-  interval: 0.55,
-  intervalScale: 0.88,
-  minInterval: 0.14,
-  dodgePoints: 1,
+export const CAR = {
+  length: 4.4,
+  width: 2.0,
+  maxSpeed: 34,
+  accel: 16,
+  brake: 30,
+  reverseMax: 10,
+  steer: 0.55,
+  grip: 6.5,
 };
 
-export const COIN = {
-  size: 24,
-  speed: 190,
-  speedPerLevel: 14,
-  interval: 1.4,
-  intervalJitter: 0.8,
-  points: 10,
-};
+// Original vehicle names (no real-world or GTA names).
+export const CAR_NAMES = ['Brisa', 'Flecha', 'Tortuga', 'Camino', 'Vela', 'Solano', 'Coral', 'Duna'];
+export const CAR_COLORS = [0xc23b2e, 0x2e6fc2, 0xe8b93a, 0x3aa655, 0x7a4fd0, 0xd97b2e, 0xdddddd, 0x222831, 0x0f766e, 0xb03a5b];
+export const PED_COLORS = [0xe8b93a, 0x3aa655, 0xc25a7a, 0x4f7ad0, 0xd97b2e, 0x8a6fd0, 0xdddddd, 0x2e6f5a, 0xb03a5b, 0x5a8a2e];
 
-/** Seconds of play per level, and the last level: speeds and spawn rates stop growing there. */
-export const LEVEL = { seconds: 12, max: 12 };
+export const WANTED_MAX = 5;
+export const POLICE_CHASE_SPEED = 26;
 
-/** How many falling things can exist at once; the pool is allocated once, at boot. */
-export const POOL_SIZE = 64;
+// Cash pickups scattered around the city (respawn after a minute).
+export const CASH_SPOTS = [
+  [30, -90], [-80, 30], [145, 30], [-145, -90], [90, 145], [-30, -145],
+  [200, -30], [-200, 90], [30, 200], [-90, -200], [175, -175], [-175, 175],
+];
 
-export const PALETTE = {
-  backdrop: '#11141b',
-  sky: '#1b1f2a',
-  ground: '#2a3040',
-  player: '#4fc3f7',
-  block: '#e5534b',
-  coin: '#f2c94c',
-  panel: '#252b38',
-  text: '#eef1f5',
-  muted: '#8b93a3',
-};
+// The story: Leo Marin, a getaway driver, owes a debt to Marta Solis and works it
+// off job by job for her crew. Each mission pays cash; finish all five to clear it.
+export const STORY_INTRO =
+  'Leo Marin owes Marta Solis one last debt. Five jobs, one city, and a crew ' +
+  'that only trusts drivers who finish what they start. Pay it off, and Solara Bay is yours.';
 
-export const FONT = 'system-ui, -apple-system, "Segoe UI", sans-serif';
+export const MISSIONS = [
+  {
+    id: 1,
+    name: 'First Wheels',
+    intro: 'Benny needs a car, and the one parked by the plaza will do. Take it — nobody is watching. Yet.',
+    payout: 500,
+    steps: [
+      { type: 'steal', text: 'Steal the marked sedan by the plaza', at: [40, 30], radius: 6 },
+      { type: 'goto', text: "Drive it to Benny's garage", at: [116, -58], radius: 8 },
+    ],
+  },
+  {
+    id: 2,
+    name: 'The Pickup',
+    intro: 'A package is waiting at the marina dock. Grab it on foot, get back in the car, and take it to Marta\'s cafe. No detours.',
+    payout: 800,
+    steps: [
+      { type: 'goto', text: 'Drive to the marina dock', at: [174, 232], radius: 8 },
+      { type: 'grab', text: 'Get out and grab the package', at: [174, 232], radius: 5 },
+      { type: 'goto', text: "Deliver it to Marta's cafe", at: [-174, 58], radius: 8 },
+    ],
+  },
+  {
+    id: 3,
+    name: 'Hot Pursuit',
+    intro: 'Somebody talked. The whole Solara Bay force is rolling. Lose them — or reach the hideout and lay low.',
+    payout: 1200,
+    steps: [
+      { type: 'survive', text: 'Lose the cops: stay unseen for 20 seconds, or reach the hideout', at: [-203, -203], radius: 9, seconds: 20 },
+    ],
+  },
+  {
+    id: 4,
+    name: 'The Getaway',
+    intro: 'A client needs a driver who knows every shortcut. Four checkpoints, one hundred seconds. Do not be late.',
+    payout: 1500,
+    steps: [
+      { type: 'checkpoints', text: 'Hit all 4 checkpoints before the clock runs out', seconds: 100,
+        points: [[-174, -174], [174, -174], [174, 174], [-174, 174]] },
+    ],
+  },
+  {
+    id: 5,
+    name: 'Harbor Heist',
+    intro: 'The last job. An armored van sits at the harbor under guard. Take out the guards, take the van, and bring it to the warehouse. Then you are free.',
+    payout: 5000,
+    steps: [
+      { type: 'goto', text: 'Drive to the harbor', at: [203, 203], radius: 9 },
+      { type: 'shootout', text: 'Take out the harbor guards (4)', at: [203, 203], radius: 26 },
+      { type: 'steal', text: 'Steal the armored van', at: [215, 215], radius: 7 },
+      { type: 'goto', text: 'Deliver the van to the warehouse', at: [-203, 174], radius: 9 },
+    ],
+  },
+];
 
-/** Where the best score is kept between visits (this browser only). */
-export const BEST_KEY = 'block-dodger.best';
+export const SAFEHOUSE = { x: 0, z: -20 };
+export const HOSPITAL = { x: 58, z: -174 };
+export const GARAGE = { x: 116, z: -58 };
+export const MARINA = { x: 174, z: 232 };
+export const CAFE = { x: -174, z: 58 };
+export const HIDEOUT = { x: -203, z: -203 };
+export const HARBOR = { x: 203, z: 203 };
+export const WAREHOUSE = { x: -203, z: 174 };

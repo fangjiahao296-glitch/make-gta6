@@ -1,53 +1,126 @@
-// Keyboard and pointer input. Held keys give a steering direction; one-shot presses (start or
-// restart, pause) are queued as bit flags and taken once by the loop, so a press between two
-// frames is never lost and never counted twice.
+// Keyboard and mouse input. WASD moves and drives, E enters and steals cars,
+// Space jumps (on foot) or handbrakes (in a car), Shift runs, mouse steers the
+// camera (click the canvas to lock the pointer), left click shoots.
+export const ACTION_ENTER = 1;
+export const ACTION_JUMP = 2;
+export const ACTION_SHOOT = 4;
+export const ACTION_PAUSE = 8;
+export const ACTION_CONFIRM = 16;
+export const ACTION_HORN = 32;
+export const ACTION_MUTE = 64;
 
-export const ACTION_CONFIRM = 1;
-export const ACTION_PAUSE = 2;
+const KEYMAP = {
+  KeyW: 'up', ArrowUp: 'up',
+  KeyS: 'down', ArrowDown: 'down',
+  KeyA: 'left', ArrowLeft: 'left',
+  KeyD: 'right', ArrowRight: 'right',
+  ShiftLeft: 'run', ShiftRight: 'run',
+};
 
-const LEFT = new Set(['ArrowLeft', 'KeyA']);
-const RIGHT = new Set(['ArrowRight', 'KeyD']);
-const CONFIRM = new Set(['Space', 'Enter']);
-const PAUSE = new Set(['KeyP', 'Escape']);
-
-export function createInput(target) {
-  let left = false;
-  let right = false;
+export function createInput(canvas) {
+  const keys = new Set();
   let actions = 0;
+  let mouseDX = 0;
+  let mouseDY = 0;
+  let mouseDown = false;
+  let spaceHeld = false;
+  let locked = false;
 
-  window.addEventListener('keydown', (event) => {
-    if (LEFT.has(event.code)) left = true;
-    else if (RIGHT.has(event.code)) right = true;
-    else if (CONFIRM.has(event.code)) {
-      if (!event.repeat) actions |= ACTION_CONFIRM;
-    } else if (PAUSE.has(event.code)) {
-      if (!event.repeat) actions |= ACTION_PAUSE;
-    } else return;
-    event.preventDefault();
-  });
-  window.addEventListener('keyup', (event) => {
-    if (LEFT.has(event.code)) left = false;
-    else if (RIGHT.has(event.code)) right = false;
-  });
-  // A key released while the tab is hidden never sends keyup: let go of everything on blur.
-  window.addEventListener('blur', () => {
-    left = false;
-    right = false;
-  });
-  target.addEventListener('pointerdown', () => {
-    actions |= ACTION_CONFIRM;
-  });
+  function onKeyDown(event) {
+    if (event.repeat) return;
+    const name = KEYMAP[event.code];
+    if (name) {
+      keys.add(name);
+      event.preventDefault();
+    }
+    if (event.code === 'KeyE') actions |= ACTION_ENTER;
+    if (event.code === 'Space') {
+      actions |= ACTION_JUMP;
+      spaceHeld = true;
+      event.preventDefault();
+    }
+    if (event.code === 'KeyP' || event.code === 'Escape') actions |= ACTION_PAUSE;
+    if (event.code === 'Enter') actions |= ACTION_CONFIRM;
+    if (event.code === 'KeyH') actions |= ACTION_HORN;
+    if (event.code === 'KeyM') actions |= ACTION_MUTE;
+  }
+
+  function onKeyUp(event) {
+    const name = KEYMAP[event.code];
+    if (name) keys.delete(name);
+    if (event.code === 'Space') spaceHeld = false;
+  }
+
+  function onMouseMove(event) {
+    if (document.pointerLockElement === canvas) {
+      mouseDX += event.movementX || 0;
+      mouseDY += event.movementY || 0;
+    }
+  }
+
+  function onMouseDown(event) {
+    if (event.button === 0) {
+      mouseDown = true;
+      actions |= ACTION_SHOOT;
+      if (document.pointerLockElement !== canvas) canvas.requestPointerLock?.();
+    }
+  }
+
+  function onMouseUp(event) {
+    if (event.button === 0) mouseDown = false;
+  }
+
+  function onLockChange() {
+    locked = document.pointerLockElement === canvas;
+  }
+
+  function onBlur() {
+    keys.clear();
+    mouseDown = false;
+    spaceHeld = false;
+  }
+
+  window.addEventListener('keydown', onKeyDown);
+  window.addEventListener('keyup', onKeyUp);
+  window.addEventListener('blur', onBlur);
+  document.addEventListener('mousemove', onMouseMove);
+  canvas.addEventListener('mousedown', onMouseDown);
+  window.addEventListener('mouseup', onMouseUp);
+  document.addEventListener('pointerlockchange', onLockChange);
 
   return {
-    /** -1 for left, 1 for right, 0 for neither or both. */
-    direction() {
-      return (right ? 1 : 0) - (left ? 1 : 0);
+    // Held movement keys, as -1/0/1 pairs.
+    move() {
+      const x = (keys.has('right') ? 1 : 0) - (keys.has('left') ? 1 : 0);
+      const y = (keys.has('up') ? 1 : 0) - (keys.has('down') ? 1 : 0);
+      return { x, y, run: keys.has('run') };
     },
-    /** The one-shot presses since the last call, as ACTION_* flags. */
+    // One-frame actions; calling this clears them.
     takeActions() {
       const taken = actions;
       actions = 0;
       return taken;
+    },
+    // Mouse look deltas since the last read, in pixels.
+    takeLook() {
+      const dx = mouseDX;
+      const dy = mouseDY;
+      mouseDX = 0;
+      mouseDY = 0;
+      return { dx, dy };
+    },
+    isMouseDown() {
+      return mouseDown;
+    },
+    // Space held down (handbrake while driving).
+    isJumpHeld() {
+      return spaceHeld;
+    },
+    isLocked() {
+      return locked;
+    },
+    releasePointer() {
+      if (document.pointerLockElement) document.exitPointerLock?.();
     },
   };
 }

@@ -1,79 +1,184 @@
-// The screenshot scenes behind ?shot=start|play|end. Each one plays the real rules forward from a
-// fresh world for a fixed number of steps, steered by a simple autopilot (look ahead each way the
-// paddle could move, keep clear of blocks, chase the lowest coin when that is safe), so the frame
-// is what a short game really looks like and the same seed always gives the same frame.
-import { FIELD, PLAYER, STEP } from './config.js';
-import { EVENT_OVER, KIND_BLOCK } from './world.js';
-import { SCREEN_OVER, SCREEN_PLAY, SCREEN_TITLE } from './render.js';
+// Screenshot scenes behind ?shot=start|drive|chase|mission. Each one plays the
+// real rules forward from a fresh world for a fixed number of steps, steered by
+// a scripted driver, so the frame is what a short game really looks like and
+// the same seed always gives the same frame.
+import { STEP } from './config.js';
 
-const START_SECONDS = 5;
-const PLAY_SECONDS = 26;
-const END_LIMIT_SECONDS = 600;
-/**
- * How far ahead, in seconds, the autopilot checks each way it could move: the play scene's pilot
- * looks well ahead and keeps all its lives; the end scene's looks only a moment ahead, so it is
- * caught out once the blocks speed up, as a hurried player is.
- */
-const HORIZON_PLAY = 0.7;
-const HORIZON_END = 0.25;
-const SAMPLE = 1 / 30;
-const DIRECTIONS = [0, -1, 1];
-/** Extra room, each side, it keeps between the paddle and a block. */
-const MARGIN = 10;
+const SAMPLE = STEP;
 
-/** Seconds until moving in `direction` (-1, 0, 1) runs the paddle into a block; Infinity when it never does. */
-function timeToHit(state, direction, horizon) {
-  const player = state.player;
-  for (let t = SAMPLE; t <= horizon; t += SAMPLE) {
-    const x = Math.min(FIELD.width - player.width, Math.max(0, player.x + direction * PLAYER.speed * t));
-    for (let index = 0; index < state.items.length; index += 1) {
-      const item = state.items[index];
-      if (!item.active || item.kind !== KIND_BLOCK) continue;
-      const y = item.y + item.speed * t;
-      if (y + item.height > player.y && y < player.y + player.height && item.x < x + player.width + MARGIN && item.x + item.width > x - MARGIN) return t;
-    }
-  }
-  return Infinity;
+// Drive straight up road x=0, steering back to the centre line.
+function driveDriver(state) {
+  const car = state.playerCar;
+  return {
+    move: { x: Math.max(-1, Math.min(1, -car.x * 0.2)), y: 1, run: false },
+    look: { dx: 0, dy: 0 },
+    actions: 0,
+    jump: false,
+  };
 }
 
-/** Of the safe ways to move, the one toward the lowest coin (or the centre); else the one that is hit last. */
-function autopilot(state, horizon) {
+// Run up the sidewalk at x=9.5, camera behind.
+function chaseDriver(state) {
   const player = state.player;
-  let coin = null;
-  for (let index = 0; index < state.items.length; index += 1) {
-    const item = state.items[index];
-    if (item.active && item.kind !== KIND_BLOCK && (coin === null || item.y > coin.y)) coin = item;
+  player.camYaw = Math.PI;
+  return {
+    move: { x: 0, y: 1, run: true },
+    look: { dx: 0, dy: 0 },
+    actions: 0,
+    jump: false,
+  };
+}
+
+// Stand at the harbor and aim at the guards; fire once at the start.
+function missionDriver(state) {
+  const player = state.player;
+  player.camYaw = -Math.PI * 0.75;
+  const first = state.time < 0.1;
+  return {
+    move: { x: 0, y: 0, run: false },
+    look: { dx: 0, dy: 0 },
+    actions: first ? 4 : 0, // ACTION_SHOOT
+    jump: false,
+  };
+}
+
+function simulate(world, seconds) {
+  const steps = Math.round(seconds / SAMPLE);
+  for (let i = 0; i < steps; i += 1) {
+    // No paint: hundreds of software renders would take minutes; the scene is
+    // painted once, after the simulation, by main.js.
+    world.update(SAMPLE, 0, { dx: 0, dy: 0 }, false);
   }
-  const target = coin === null ? FIELD.width / 2 : coin.x + coin.width / 2;
-  const centre = player.x + player.width / 2;
-  const wanted = target > centre + 8 ? 1 : target < centre - 8 ? -1 : 0;
-  let best = wanted;
-  let bestTime = timeToHit(state, wanted, horizon);
-  for (let index = 0; index < DIRECTIONS.length && bestTime !== Infinity; index += 1) {
-    const time = timeToHit(state, DIRECTIONS[index], horizon);
-    if (time > bestTime) {
-      bestTime = time;
-      best = DIRECTIONS[index];
-    }
-  }
-  return best;
+}
+
+// Put a car somewhere for the final frame (a police car closing in, traffic
+// ahead). The simulation is over, so it stays where it is put.
+function placeCar(car, x, z, angle) {
+  if (!car) return;
+  car.x = x;
+  car.z = z;
+  car.angle = angle;
+  car.speed = 0;
+  car.mesh.position.set(x, 0, z);
+  car.mesh.rotation.y = angle;
 }
 
 /**
- * Set `world` to the named scene (start, play or end; any other name is start) and return the
- * screen to draw over it and the best score to show.
+ * Set `world` to the named scene (start, drive, chase or mission; any other
+ * name is start) and return the screen it shows.
  */
 export function stageShot(name, world) {
-  world.reset();
-  if (name !== 'play' && name !== 'end') {
-    for (let index = 0; index < START_SECONDS / STEP; index += 1) world.step(STEP, 0, true);
-    return { screen: SCREEN_TITLE, best: 0 };
+  const state = world.state;
+  if (name === 'drive') {
+    world.resetRun(true);
+    state.money = 1250;
+    state.screen = 'play';
+    state.missions.index = 0;
+    state.missions.startMission();
+    const sedan = state.parkedCars.find((c) => c.missionCar === 1);
+    sedan.x = 0;
+    sedan.z = -160;
+    sedan.angle = 0;
+    sedan.mesh.position.set(0, 0, -160);
+    sedan.mesh.rotation.y = 0;
+    state.putPlayerInCar(sedan, true);
+    state.wanted.addHeat(1, '');
+    state.driver = {
+      step(dt, s) {
+        const d = driveDriver(s);
+        s.driver.move = d.move;
+        s.driver.look = d.look;
+        s.driver.actions = d.actions;
+        s.driver.jump = d.jump;
+      },
+    };
+    simulate(world, 4.5);
+    state.driver = null;
+    // Traffic ahead, in frame: two cars on the road in front of the player.
+    const pc = state.playerCar;
+    placeCar(state.traffic[0], 2, pc.z + 45, 0);
+    placeCar(state.traffic[1], -2.5, pc.z + 80, 0);
+    return { screen: 'play' };
   }
-  const limit = name === 'end' ? END_LIMIT_SECONDS : PLAY_SECONDS;
-  const horizon = name === 'end' ? HORIZON_END : HORIZON_PLAY;
-  for (let index = 0; index < limit / STEP; index += 1) {
-    if (world.step(STEP, autopilot(world.state, horizon), false) & EVENT_OVER) break;
+  if (name === 'chase') {
+    world.resetRun(true);
+    state.money = 1250;
+    state.screen = 'play';
+    state.player.x = 9.5;
+    state.player.z = -60;
+    state.player.angle = 0;
+    state.player.camYaw = Math.PI;
+    state.player.mesh.position.set(9.5, 0, -60);
+    state.wanted.addHeat(3, '');
+    state.driver = {
+      step(dt, s) {
+        const d = chaseDriver(s);
+        s.driver.move = d.move;
+        s.driver.look = d.look;
+        s.driver.actions = d.actions;
+        s.driver.jump = d.jump;
+      },
+    };
+    simulate(world, 5);
+    state.driver = null;
+    // A police car closing in, in frame ahead of the player: the chase cars
+    // spend the run behind the camera, so the frame would otherwise show no
+    // police at all.
+    placeCar(state.wanted.policeCars[0], 0, state.player.z + 25, Math.PI);
+    return { screen: 'play' };
   }
-  const over = world.state.lives === 0;
-  return { screen: over ? SCREEN_OVER : SCREEN_PLAY, best: world.state.score };
+  if (name === 'mission') {
+    world.resetRun(true);
+    state.money = 3200;
+    state.screen = 'play';
+    state.missions.index = 4;
+    state.missions.jumpTo(1);
+    // Inside the harbor park (open ground since the fix), off the beacon's
+    // line so the armored van at 215,215 shows beside the beacon instead of
+    // hiding behind it. Facing the guards at 203,203.
+    state.player.x = 185;
+    state.player.z = 200;
+    state.player.angle = 1.405;
+    state.player.camYaw = -1.737;
+    state.player.mesh.position.set(185, 0, 200);
+    state.wanted.addHeat(2, '');
+    state.driver = {
+      step(dt, s) {
+        const d = missionDriver(s);
+        s.driver.move = d.move;
+        s.driver.look = d.look;
+        s.driver.actions = d.actions;
+        s.driver.jump = d.jump;
+      },
+    };
+    simulate(world, 2.5);
+    // One last shot, one step before the paint: the tracer lives 0.09 s and
+    // only decays while the world updates, so it stays bright in the frame.
+    state.driver = {
+      step(dt, s) {
+        s.driver.move = { x: 0, y: 0, run: false };
+        s.driver.look = { dx: 0, dy: 0 };
+        s.driver.actions = 4; // ACTION_SHOOT
+        s.driver.jump = false;
+      },
+    };
+    simulate(world, 1 / 60);
+    state.driver = null;
+    // A guard's return shot, frozen mid-flight: it crosses the frame toward
+    // the player, unlike the player's own tracer, which runs away from the
+    // camera and is invisible end-on.
+    const guard = state.combat.enemies.find((e) => !e.dead);
+    if (guard) {
+      state.combat.spawnTracer(
+        { x: guard.x, y: 1.4, z: guard.z },
+        { x: state.player.x + 1.5, y: 1.2, z: state.player.z + 1 },
+      );
+    }
+    return { screen: 'play' };
+  }
+  // start: the title screen over the live city.
+  world.resetRun(true);
+  state.screen = 'title';
+  simulate(world, 6);
+  return { screen: 'title' };
 }
