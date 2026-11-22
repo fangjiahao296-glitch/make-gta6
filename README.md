@@ -1,17 +1,15 @@
-[![make.fun · gta6-01](https://make.fun/badge/gta6-01.svg)](https://make.fun/bounty/gta6-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
-[![rank](https://make.fun/badge/gta6-01/fangjiahao296-glitch/make-gta6/rank.svg)](https://make.fun/bounty/gta6-01/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
-[![reward](https://make.fun/badge/gta6-01/fangjiahao296-glitch/make-gta6/reward.svg)](https://make.fun/bounty/gta6-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
+[![make.fun](https://make.fun/badge/competition/gta6-01.svg)](https://make.fun/bounty/gta6-01)
+[![make.fun](https://make.fun/badge/submissions/gta6-01.svg)](https://make.fun/bounty/gta6-01)
+[![make.fun](https://make.fun/badge/prize/gta6-01.svg)](https://make.fun/bounty/gta6-01)
 
 # Solara Bay — A Sun-Soaked Getaway
 
 An original open-world crime game for make.fun's **Make GTA 6** bounty
-(`gta6-01`). Drive and walk around Solara Bay, a sun-soaked coastal city;
-steal cars, outrun the police, and finish five jobs for Marta's crew to pay
-off Leo Marin's debt. Everything here — the city, the characters, the cars,
-the story, the art, the sounds and the music — is original. Nothing comes
-from Rockstar Games or any other commercial game.
-
-Built for the [Make GTA 6 bounty on make.fun](https://make.fun/bounty/gta6-01).
+([gta6-01](https://make.fun/bounty/gta6-01)). Drive and walk around Solara Bay,
+a sun-soaked coastal city; steal cars, outrun the police, and finish five jobs
+for Marta's crew to pay off Leo Marin's debt. Everything here — the city, the
+characters, the cars, the story, the art, the sounds and the music — is
+original. Nothing comes from Rockstar Games or any other commercial game.
 
 ## Play
 
@@ -39,7 +37,7 @@ files, and all sound and music are synthesized with WebAudio.
   parking lots, palms, lamps, billboards, a beach and the ocean, all built
   procedurally from a seed (`?seed=N` fixes the city and the traffic).
 - **Traffic and pedestrians**: cars cruise the road grid and turn at
-  intersections; people stroll the sidewalks.
+  intersections; people stroll the sidewalks and flee from gunfire.
 - **Stealable cars**: parked cars and traffic cars can be taken (E). Getting
   spotted adds wanted heat.
 - **Wanted level and police**: 0–5 stars. Police cars roll in, chase and ram;
@@ -59,15 +57,15 @@ files, and all sound and music are synthesized with WebAudio.
 ## Screenshots
 
 `screenshots/` holds four real renders of the game in a browser, staged with
-`?shot=start|drive|chase|mission` (see `shots.json`): the title screen, a
-drive through the city, a wanted chase on foot, and the harbor shootout.
+`?shot=start|drive|chase|mission`: the title screen, a drive through the city,
+a wanted chase on foot, and the harbor shootout.
 
 ## Tech
 
 - three.js r160, vendored as `game/vendor/three.module.min.js` (import map).
-- ES modules under `game/src/`, one file per system: `city`, `vehicles`,
-  `pedestrians`, `player`, `combat`, `wanted`, `missions`, `hud`, `audio`,
-  `save`, `render`, `world`, `shots`, `main`.
+- ES modules under `game/src/`, one file per system: `config`, `util`,
+  `audio`, `city`, `vehicles`, `pedestrians`, `player`, `combat`, `wanted`,
+  `missions`, `hud`, `save`, `shots`, `world`, `main`.
 - `main.ts` (Node 22, standard library only) copies `game/` and
   `screenshots/` to `/output` and writes `dossier.json`.
 

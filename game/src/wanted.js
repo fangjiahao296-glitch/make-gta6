@@ -1,108 +1,153 @@
-// The wanted system: 0 to 5 stars. Crime adds heat; police cars roll in and
-// chase; lay low out of sight and the heat cools off. Getting busted or
-// wasted ends the run at the hospital, poorer.
-import { WANTED_MAX } from './config.js';
-import { createPoliceCar, policeStep } from './vehicles.js';
+// Solara Bay — wanted level: heat, stars, police pursuit, busts.
+import * as THREE from 'three';
+import { WANTED } from './config.js';
+import { makeCarMesh, Car } from './vehicles.js';
+import { Shooter } from './combat.js';
+import { makeRng, clamp, dist2d, resolveCircle } from './util.js';
 
-export function createWanted(state) {
-  const wanted = {
-    stars: 0,
-    coolTimer: 0,
-    policeCars: [],
-    footCops: [],
-    bustTimer: 0,
-  };
-
-  function addHeat(n, reason) {
-    if (wanted.stars >= WANTED_MAX) return;
-    wanted.stars = Math.min(WANTED_MAX, wanted.stars + n);
-    wanted.coolTimer = 0;
-    if (reason) state.toast(`${reason} —通缉 ${wanted.stars} 星`);
-    state.audio.siren(wanted.stars > 0);
+export class Wanted {
+  constructor(scene, city, seed) {
+    this.scene = scene;
+    this.city = city;
+    this.rng = makeRng(seed ^ 0x2b1c);
+    this.heat = 0;
+    this.stars = 0;
+    this.policeCars = [];
+    this.footCops = [];
+    this.bustTimer = 0;
+    this.sirenOn = false;
   }
 
-  function clear(reason) {
-    wanted.stars = 0;
-    wanted.coolTimer = 0;
-    wanted.bustTimer = 0;
-    for (const car of wanted.policeCars) {
-      state.scene.remove(car.mesh);
-      car.dead = true;
-    }
-    wanted.policeCars.length = 0;
-    for (const cop of wanted.footCops) {
-      state.scene.remove(cop.mesh);
-      cop.dead = true;
-    }
-    wanted.footCops.length = 0;
-    state.audio.siren(false);
-    if (reason) state.toast(reason);
+  get level() { return this.stars; }
+
+  addHeat(amount) {
+    this.heat = clamp(this.heat + amount, 0, 100);
+    this._recalc();
   }
 
-  function spawnPoliceNear(player) {
-    const at = state.city.randomRoadPoint();
-    const dx = at.x - player.x;
-    const dz = at.z - player.z;
-    const d = Math.hypot(dx, dz);
-    const x = d < 30 ? player.x + (dx / (d || 1)) * 60 : at.x;
-    const z = d < 30 ? player.z + (dz / (d || 1)) * 60 : at.z;
-    const car = createPoliceCar(state, x, z);
-    wanted.policeCars.push(car);
-    return car;
+  _recalc() {
+    let s = 0;
+    for (const t of WANTED.thresholds) if (this.heat >= t) s++;
+    this.stars = s;
   }
 
-  function update(dt, player, playerCar) {
-    const target = playerCar || player;
-    const want = Math.min(wanted.stars, 3);
-    while (wanted.policeCars.length < want) spawnPoliceNear(target);
-    while (wanted.policeCars.length > want) {
-      const car = wanted.policeCars.pop();
-      state.scene.remove(car.mesh);
-      car.dead = true;
+  clear() {
+    this.heat = 0;
+    this.stars = 0;
+    this.bustTimer = 0;
+    this._despawnAll();
+  }
+
+  _despawnAll() {
+    for (const c of this.policeCars) this.scene.remove(c.mesh);
+    for (const c of this.footCops) this.scene.remove(c.mesh);
+    this.policeCars = [];
+    this.footCops = [];
+  }
+
+  // Spawn / despawn police to match the star count.
+  _matchForce(playerPos) {
+    const wantCars = Math.min(this.stars, 4);
+    while (this.policeCars.length < wantCars) {
+      const p = this.city.roadPointNear(this.rng, playerPos.x, playerPos.z, 70);
+      const mesh = makeCarMesh(0x1a1a1a, { police: true });
+      this.scene.add(mesh);
+      const car = new Car(mesh, p.x, p.z, 0);
+      car.isPolice = true;
+      car.speed = 12;
+      this.policeCars.push(car);
     }
-    let nearest = Infinity;
-    for (const car of wanted.policeCars) {
-      const d = policeStep(car, target, dt, state);
-      nearest = Math.min(nearest, d);
-      // A police car ramming the player's car slows it and shakes the camera.
-      if (playerCar && d < 3.6) {
-        playerCar.speed *= 0.92;
-        state.shake = Math.max(state.shake, 0.35);
+    while (this.policeCars.length > wantCars) {
+      const c = this.policeCars.pop();
+      this.scene.remove(c.mesh);
+    }
+    const wantCops = this.stars >= 3 ? this.stars - 2 : 0;
+    while (this.footCops.length < wantCops) {
+      const p = this.city.roadPointNear(this.rng, playerPos.x, playerPos.z, 40);
+      this.footCops.push(new Shooter(this.scene, p.x, p.z, 'cop'));
+    }
+    while (this.footCops.length > wantCops) {
+      const c = this.footCops.pop();
+      this.scene.remove(c.mesh);
+    }
+  }
+
+  // Returns events for the world to handle: {rammed, shotPlayer, busted}.
+  update(dt, ctx) {
+    const player = ctx.player;
+    const p = player.inCar ? player.inCar.pos : player.pos;
+    // Heat decays when no police can see the player.
+    const anyNear = this.policeCars.some((c) => dist2d(c.pos.x, c.pos.z, p.x, p.z) < 45)
+      || this.footCops.some((c) => c.alive && dist2d(c.pos.x, c.pos.z, p.x, p.z) < 35);
+    if (!anyNear && this.stars > 0) {
+      this.heat = Math.max(0, this.heat - WANTED.decayPerSec * dt);
+      this._recalc();
+    }
+    this._matchForce(p);
+    this.sirenOn = this.stars > 0;
+    const events = { rammed: false, shotPlayer: false, busted: false };
+
+    // Police cars chase and ram.
+    for (const car of this.policeCars) {
+      const dx = p.x - car.pos.x;
+      const dz = p.z - car.pos.z;
+      const d = Math.hypot(dx, dz) || 1;
+      const wantHeading = Math.atan2(dx, dz);
+      let dh = ((wantHeading - car.heading + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
+      car.heading += clamp(dh, -1.6 * dt, 1.6 * dt);
+      const targetSpeed = d < 3.0 ? 0 : d > 60 ? 30 : 24;
+      car.speed += (targetSpeed - car.speed) * Math.min(1, dt);
+      car.pos.x += Math.sin(car.heading) * car.speed * dt;
+      car.pos.z += Math.cos(car.heading) * car.speed * dt;
+      // Police cars must not drive through buildings either.
+      const cp = { x: car.pos.x, z: car.pos.z };
+      resolveCircle(cp, 2.3, ctx.city.colliders);
+      car.pos.x = cp.x; car.pos.z = cp.z;
+      car.mesh.position.copy(car.pos);
+      car.mesh.rotation.y = car.heading;
+      // Ram: close contact hurts the player / car.
+      if (d < 4.2) {
+        events.rammed = true;
+        // Shove the player's car / player away a little (not in shot mode:
+        // the staged chase photo must not shove the player out of frame).
+        if (!ctx.shot) {
+          const push = 3.5;
+          if (player.inCar) {
+            player.inCar.pos.x += (dx / d) * push * dt * 3;
+            player.inCar.pos.z += (dz / d) * push * dt * 3;
+          } else {
+            player.pos.x += (dx / d) * push * dt * 2;
+            player.pos.z += (dz / d) * push * dt * 2;
+          }
+        }
       }
     }
-    // On foot, a police car sitting on the player busts them.
-    if (!playerCar && wanted.stars > 0 && nearest < 4) {
-      wanted.bustTimer += dt;
-      if (wanted.bustTimer > 1.6) state.busted();
-    } else {
-      wanted.bustTimer = Math.max(0, wanted.bustTimer - dt * 2);
+
+    // Foot cops chase and shoot.
+    for (const cop of this.footCops) {
+      if (!cop.alive) continue;
+      const fired = cop.update(dt, p, ctx);
+      if (fired) {
+        const hit = ctx.combat.fireEnemy(cop.pos, p, 0.45);
+        if (hit) events.shotPlayer = true;
+      }
     }
-    // Foot cops join the chase at 3 stars and up.
-    if (wanted.stars >= 3 && wanted.footCops.length < 2) {
-      const cop = state.combat.spawnEnemy(
-        target.x + state.rng.range(-14, 14), target.z + state.rng.range(-14, 14),
-        { cop: true, shirt: 0x2e4a6b, accuracy: 0.3, drop: 80 },
-      );
-      wanted.footCops.push(cop);
-    }
-    // Cooling off: no police car close for a while drops a star.
-    if (wanted.stars > 0) {
-      if (nearest > 70) {
-        wanted.coolTimer += dt;
-        if (wanted.coolTimer > 8) {
-          wanted.stars -= 1;
-          wanted.coolTimer = 0;
-          state.toast(`风头过去了一点 — 通缉 ${wanted.stars} 星`);
-          state.audio.siren(wanted.stars > 0);
+
+    // Bust: a police car sits on a slow on-foot player for a while.
+    if (!player.inCar && this.stars > 0) {
+      const near = this.policeCars.some((c) => dist2d(c.pos.x, c.pos.z, p.x, p.z) < WANTED.bustDist);
+      if (near) {
+        this.bustTimer += dt;
+        if (this.bustTimer >= WANTED.bustTime) {
+          this.bustTimer = 0;
+          events.busted = true;
         }
       } else {
-        wanted.coolTimer = 0;
+        this.bustTimer = 0;
       }
+    } else {
+      this.bustTimer = 0;
     }
+    return events;
   }
-
-  // Return the state object itself, not a spread copy: the HUD reads
-  // wanted.stars, and a copy would freeze it at 0 while the closures kept
-  // counting heat on the original.
-  return Object.assign(wanted, { addHeat, clear, update });
 }

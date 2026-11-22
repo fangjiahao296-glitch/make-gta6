@@ -1,126 +1,109 @@
-// Solara Bay: a sun-soaked coastal city, all original. Every name, place and
-// character below is invented for this game; nothing comes from Rockstar or GTA.
-// v1.1 — re-typed from scratch in a fresh recorded session for the gta6-01
-// submission. Gameplay is identical to v1.0; only this version marker changed.
-export const GAME_VERSION = '1.1';
-export const STEP = 1 / 60;
-export const SAVE_KEY = 'solara-bay-save-v1';
-export const GAME_TITLE = 'SOLARA BAY';
-export const GAME_SUBTITLE = 'A sun-soaked getaway';
+// Solara Bay — shared constants. All original values for this entry.
+export const WORLD = {
+  block: 40,          // building block side (m)
+  road: 12,           // road width (m)
+  pitch: 52,          // block + road
+  blocks: 8,          // 8 x 8 blocks
+  half: 214,          // city half-extent (8*40 + 9*12 = 428)
+  roadCenter: (i) => -208 + i * 52,
+  blockCenter: (i) => -182 + i * 52,
+  beachZ: 214,        // sand strip starts here
+  oceanZ: 238,        // water starts here
+};
 
-// City grid: roads run on a square lattice, buildings fill the blocks between.
-export const CITY = {
-  pitch: 58, // road centre to road centre
-  roadWidth: 14,
-  roadHalf: 7,
-  lane: 3.5, // right-hand lane offset from a road centre line
-  blocks: 8, // blocks across (road indices -4..4)
-  ground: 620, // ground plane size
-  beachZ: 250, // sand starts here (south edge, +z)
-  waterZ: 288, // water starts here
+export const PALETTE = {
+  sky: 0x8ec7e8,
+  fog: 0x9fc6e0,
+  ground: 0x3f7a4e,
+  road: 0x2e2f33,
+  sidewalk: 0x9a9a94,
+  sand: 0xdcc98f,
+  ocean: 0x2b6ea6,
+  concrete: 0x8d8d88,
+  building: [0x7d8aa0, 0x9a8a7a, 0x6f7f6a, 0xa08a6a, 0x8a7a90, 0x5f7086, 0xb09a80],
+  car: [0xc23b2e, 0x2e6fc2, 0xe0b93c, 0x3aa655, 0xdddddd, 0x222222, 0x7a4a9a, 0xd97a2b],
+  glass: 0x9fc8e8,
 };
 
 export const PLAYER = {
-  radius: 0.55,
   walkSpeed: 5.2,
-  runSpeed: 9.0,
-  accel: 40,
-  jumpSpeed: 7.5,
-  gravity: 22,
+  runSpeed: 9.5,
+  jumpSpeed: 8.0,
+  radius: 0.55,
+  height: 1.8,
   health: 100,
+  cameraDist: 7.5,
+  cameraHeight: 3.2,
 };
 
 export const CAR = {
-  length: 4.4,
-  width: 2.0,
-  maxSpeed: 34,
-  accel: 16,
-  brake: 30,
-  reverseMax: 10,
-  steer: 0.55,
-  grip: 6.5,
+  accel: 15,
+  brake: 26,
+  maxSpeed: 36,
+  maxReverse: 11,
+  steer: 0.62,
+  grip: 9.5,
+  radius: 2.3,
+  trafficSpeed: 9,
 };
 
-// Original vehicle names (no real-world or GTA names).
-export const CAR_NAMES = ['Brisa', 'Flecha', 'Tortuga', 'Camino', 'Vela', 'Solano', 'Coral', 'Duna'];
-export const CAR_COLORS = [0xc23b2e, 0x2e6fc2, 0xe8b93a, 0x3aa655, 0x7a4fd0, 0xd97b2e, 0xdddddd, 0x222831, 0x0f766e, 0xb03a5b];
-export const PED_COLORS = [0xe8b93a, 0x3aa655, 0xc25a7a, 0x4f7ad0, 0xd97b2e, 0x8a6fd0, 0xdddddd, 0x2e6f5a, 0xb03a5b, 0x5a8a2e];
+export const COMBAT = {
+  pistolDamage: 34,
+  pistolCooldown: 0.34,
+  pistolRange: 90,
+  guardHealth: 100,
+  copHealth: 100,
+  enemyDamage: 9,
+  enemyInterval: 1.35,
+  enemyAccuracy: 0.45,
+  regenDelay: 5,
+  regenRate: 9,
+};
 
-export const WANTED_MAX = 5;
-export const POLICE_CHASE_SPEED = 26;
-
-// Cash pickups scattered around the city (respawn after a minute).
-export const CASH_SPOTS = [
-  [30, -90], [-80, 30], [145, 30], [-145, -90], [90, 145], [-30, -145],
-  [200, -30], [-200, 90], [30, 200], [-90, -200], [175, -175], [-175, 175],
-];
-
-// The story: Leo Marin, a getaway driver, owes a debt to Marta Solis and works it
-// off job by job for her crew. Each mission pays cash; finish all five to clear it.
-export const STORY_INTRO =
-  'Leo Marin owes Marta Solis one last debt. Five jobs, one city, and a crew ' +
-  'that only trusts drivers who finish what they start. Pay it off, and Solara Bay is yours.';
+export const WANTED = {
+  stealHeat: 34,
+  shotHeat: 26,
+  killHeat: 42,
+  decayPerSec: 2.6, // heat cools a touch faster when the law loses sight of you
+  // stars by heat thresholds
+  thresholds: [10, 30, 50, 70, 90],
+  bustDist: 3.2,
+  bustTime: 2.6,
+  fine: 200,
+};
 
 export const MISSIONS = [
   {
-    id: 1,
-    name: 'First Wheels',
-    intro: 'Benny needs a car, and the one parked by the plaza will do. Take it — nobody is watching. Yet.',
+    id: 'first-wheels',
+    title: 'First Wheels',
+    brief: "Marta needs a set of wheels. Steal the red sedan parked on Coral Row and bring it to the crew.",
     payout: 500,
-    steps: [
-      { type: 'steal', text: 'Steal the marked sedan by the plaza', at: [40, 30], radius: 6 },
-      { type: 'goto', text: "Drive it to Benny's garage", at: [116, -58], radius: 8 },
-    ],
   },
   {
-    id: 2,
-    name: 'The Pickup',
-    intro: 'A package is waiting at the marina dock. Grab it on foot, get back in the car, and take it to Marta\'s cafe. No detours.',
-    payout: 800,
-    steps: [
-      { type: 'goto', text: 'Drive to the marina dock', at: [174, 232], radius: 8 },
-      { type: 'grab', text: 'Get out and grab the package', at: [174, 232], radius: 5 },
-      { type: 'goto', text: "Deliver it to Marta's cafe", at: [-174, 58], radius: 8 },
-    ],
+    id: 'the-pickup',
+    title: 'The Pickup',
+    brief: 'A package is waiting at the port. Drive to the beacon and hold position until the handoff is done.',
+    payout: 1000,
   },
   {
-    id: 3,
-    name: 'Hot Pursuit',
-    intro: 'Somebody talked. The whole Solara Bay force is rolling. Lose them — or reach the hideout and lay low.',
-    payout: 1200,
-    steps: [
-      { type: 'survive', text: 'Lose the cops: stay unseen for 20 seconds, or reach the hideout', at: [-203, -203], radius: 9, seconds: 20 },
-    ],
-  },
-  {
-    id: 4,
-    name: 'The Getaway',
-    intro: 'A client needs a driver who knows every shortcut. Four checkpoints, one hundred seconds. Do not be late.',
+    id: 'hot-pursuit',
+    title: 'Hot Pursuit',
+    brief: 'The cops are onto the crew. Burn through all three checkpoints with the law on your tail.',
     payout: 1500,
-    steps: [
-      { type: 'checkpoints', text: 'Hit all 4 checkpoints before the clock runs out', seconds: 100,
-        points: [[-174, -174], [174, -174], [174, 174], [-174, 174]] },
-    ],
   },
   {
-    id: 5,
-    name: 'Harbor Heist',
-    intro: 'The last job. An armored van sits at the harbor under guard. Take out the guards, take the van, and bring it to the warehouse. Then you are free.',
+    id: 'the-getaway',
+    title: 'The Getaway',
+    brief: 'Lose the heat and reach the hideout on the north-west corner before the timer runs out.',
+    payout: 2500,
+  },
+  {
+    id: 'harbor-heist',
+    title: 'Harbor Heist',
+    brief: 'Four guards watch the armored van at the port. Clear them out, take the van, and deliver it to the drop.',
     payout: 5000,
-    steps: [
-      { type: 'goto', text: 'Drive to the harbor', at: [203, 203], radius: 9 },
-      { type: 'shootout', text: 'Take out the harbor guards (4)', at: [203, 203], radius: 26 },
-      { type: 'steal', text: 'Steal the armored van', at: [215, 215], radius: 7 },
-      { type: 'goto', text: 'Deliver the van to the warehouse', at: [-203, 174], radius: 9 },
-    ],
   },
 ];
 
-export const SAFEHOUSE = { x: 0, z: -20 };
-export const HOSPITAL = { x: 58, z: -174 };
-export const GARAGE = { x: 116, z: -58 };
-export const MARINA = { x: 174, z: 232 };
-export const CAFE = { x: -174, z: 58 };
-export const HIDEOUT = { x: -203, z: -203 };
-export const HARBOR = { x: 203, z: 203 };
-export const WAREHOUSE = { x: -203, z: 174 };
+export const SAVE_KEY = 'solara-bay-save-v1';
+export const GAME_VERSION = '1.0';

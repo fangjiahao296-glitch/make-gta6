@@ -1,160 +1,165 @@
-// Combat: a hitscan pistol for the player, armed enemies (foot cops and
-// mission guards) who shoot back, tracers, muzzle flashes and cash drops.
+// Solara Bay — hitscan pistol combat: player shots, enemy shooters, tracers.
 import * as THREE from 'three';
-import { createPersonMesh } from './pedestrians.js';
+import { COMBAT } from './config.js';
+import { makeRng } from './util.js';
 
-const RAYCASTER = new THREE.Raycaster();
-const SCREEN_CENTER = new THREE.Vector2(0, 0);
+// A hostile shooter (guard or foot cop). Simple capsule figure with a gun.
+export function makeShooterMesh(uniformColor) {
+  const g = new THREE.Group();
+  const uniform = new THREE.MeshLambertMaterial({ color: uniformColor });
+  const skin = new THREE.MeshLambertMaterial({ color: 0xd9a986 });
+  const legs = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.8, 0.3), new THREE.MeshLambertMaterial({ color: 0x222222 }));
+  legs.position.y = 0.4;
+  g.add(legs);
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.62, 0.32), uniform);
+  torso.position.y = 1.1;
+  g.add(torso);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.21, 10, 8), skin);
+  head.position.y = 1.62;
+  g.add(head);
+  const vest = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.4, 0.36), new THREE.MeshLambertMaterial({ color: 0x1a1a1a }));
+  vest.position.y = 1.12;
+  g.add(vest);
+  const gun = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.12, 0.55), new THREE.MeshLambertMaterial({ color: 0x111111 }));
+  gun.position.set(0.2, 1.25, 0.35);
+  g.add(gun);
+  g.userData.gun = gun;
+  return g;
+}
 
-export function createCombat(state) {
-  const enemies = [];
-  const tracers = [];
-  const tracerGeo = new THREE.CylinderGeometry(0.03, 0.03, 1, 5);
-  const tracerMat = new THREE.MeshBasicMaterial({ color: 0xffe9a8, transparent: true, opacity: 0.9 });
-  const flashLight = new THREE.PointLight(0xffc860, 0, 18);
-  state.scene.add(flashLight);
-
-  function spawnTracer(from, to) {
-    const mesh = new THREE.Mesh(tracerGeo, tracerMat.clone());
-    const dir = new THREE.Vector3().subVectors(to, from);
-    const len = dir.length();
-    mesh.scale.set(1, len, 1);
-    mesh.position.copy(from).addScaledVector(dir, 0.5);
-    mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize());
-    mesh.userData.life = 0.09;
-    state.scene.add(mesh);
-    tracers.push(mesh);
+export class Shooter {
+  constructor(scene, x, z, kind) {
+    this.kind = kind; // 'guard' | 'cop'
+    this.mesh = makeShooterMesh(kind === 'cop' ? 0x2233aa : 0x4a4a3a);
+    scene.add(this.mesh);
+    this.pos = new THREE.Vector3(x, 0, z);
+    this.health = kind === 'cop' ? COMBAT.copHealth : COMBAT.guardHealth;
+    this.alive = true;
+    this.shootTimer = 1 + Math.random();
+    this.mesh.position.copy(this.pos);
   }
 
-  function muzzleFlash(at) {
-    flashLight.position.copy(at);
-    flashLight.intensity = 60;
-  }
-
-  // An armed enemy: a person with a gun who stands, aims and shoots at the player.
-  function spawnEnemy(x, z, opts = {}) {
-    const mesh = createPersonMesh(opts.shirt ?? 0x1a2028, 0x2c3440, 1.05);
-    mesh.position.set(x, 0, z);
-    mesh.userData.isEnemyRoot = true;
-    state.scene.add(mesh);
-    const enemy = {
-      mesh,
-      x, z,
-      health: opts.health ?? 100,
-      fireTimer: opts.delay ?? 1.2,
-      accuracy: opts.accuracy ?? 0.35,
-      cop: !!opts.cop,
-      dead: false,
-      drop: opts.drop ?? 120,
-    };
-    enemies.push(enemy);
-    return enemy;
-  }
-
-  function removeEnemy(enemy) {
-    enemy.dead = true;
-    enemy.mesh.rotation.x = Math.PI / 2 - 0.1;
-    enemy.mesh.position.y = 0.25;
-    state.audio.thud();
-    state.addCash(enemy.drop, enemy.x, enemy.z);
-    window.setTimeout(() => {
-      state.scene.remove(enemy.mesh);
-      const i = enemies.indexOf(enemy);
-      if (i >= 0) enemies.splice(i, 1);
-    }, 4000);
-  }
-
-  // Player shoots toward the screen centre. Returns the enemy hit, if any.
-  function playerShoot(camera) {
-    RAYCASTER.setFromCamera(SCREEN_CENTER, camera);
-    const targets = [];
-    for (const enemy of enemies) {
-      if (!enemy.dead) targets.push(enemy.mesh);
+  damage(amount) {
+    this.health -= amount;
+    if (this.health <= 0) {
+      this.alive = false;
+      this.mesh.visible = false;
+      return true;
     }
-    for (const car of state.policeCars) {
-      if (!car.dead) targets.push(car.mesh);
+    return false;
+  }
+
+  // Shuffle toward the player and fire with inaccuracy.
+  update(dt, playerPos, ctx) {
+    if (!this.alive) return false; // did not shoot
+    const dx = playerPos.x - this.pos.x;
+    const dz = playerPos.z - this.pos.z;
+    const d = Math.hypot(dx, dz) || 1;
+    this.mesh.rotation.y = Math.atan2(dx, dz);
+    // Close distance until in range, then hold and strafe a little.
+    if (d > 16) {
+      this.pos.x += (dx / d) * 3.4 * dt;
+      this.pos.z += (dz / d) * 3.4 * dt;
+      this.mesh.position.copy(this.pos);
     }
-    const hits = RAYCASTER.intersectObjects(targets, true);
-    const from = new THREE.Vector3();
-    camera.getWorldPosition(from);
-    let end = new THREE.Vector3();
-    RAYCASTER.ray.at(120, end);
+    this.shootTimer -= dt;
+    if (this.shootTimer <= 0 && d < 42) {
+      this.shootTimer = COMBAT.enemyInterval * (0.8 + Math.random() * 0.5);
+      return true; // fired; caller resolves the hit
+    }
+    return false;
+  }
+}
+
+export class Combat {
+  constructor(scene, camera) {
+    this.scene = scene;
+    this.camera = camera;
+    this.raycaster = new THREE.Raycaster();
+    this.cooldown = 0;
+    this.tracers = [];
+    this.muzzle = new THREE.PointLight(0xffc860, 0, 14);
+    this.scene.add(this.muzzle);
+    this.targets = []; // shootable meshes: {mesh, ref}
+    this.shootables = []; // THREE objects for raycast
+  }
+
+  registerTarget(mesh, ref) {
+    this.targets.push({ mesh, ref });
+    this.shootables.push(mesh);
+  }
+
+  unregisterTarget(ref) {
+    this.targets = this.targets.filter((t) => t.ref !== ref);
+    this.shootables = this.targets.map((t) => t.mesh);
+  }
+
+  tick(dt) {
+    if (this.cooldown > 0) this.cooldown -= dt;
+    // Fade tracers (slower, so a shot stays visible for the photo).
+    for (let i = this.tracers.length - 1; i >= 0; i--) {
+      const t = this.tracers[i];
+      t.life -= dt * 2.5;
+      t.line.material.opacity = Math.max(0, t.life);
+      if (t.life <= 0) {
+        this.scene.remove(t.line);
+        t.line.geometry.dispose();
+        t.line.material.dispose();
+        this.tracers.splice(i, 1);
+      }
+    }
+    this.muzzle.intensity = Math.max(0, this.muzzle.intensity - dt * 30);
+  }
+
+  // Player fires from the camera center. Returns the hit ref (or null).
+  firePlayer(origin, obstacles) {
+    if (this.cooldown > 0) return null;
+    this.cooldown = COMBAT.pistolCooldown;
+    this.raycaster.setFromCamera({ x: 0, y: 0 }, this.camera);
+    this.raycaster.far = COMBAT.pistolRange;
+    const hits = this.raycaster.intersectObjects([...this.shootables, ...obstacles], false);
+    let end = null;
+    let hitRef = null;
     if (hits.length > 0) {
-      const hit = hits[0];
-      end = hit.point.clone();
-      let node = hit.object;
-      while (node && !node.userData.isEnemyRoot) node = node.parent;
-      const enemy = enemies.find((e) => e.mesh === node);
-      if (enemy) {
-        enemy.health -= 34;
-        state.audio.hit();
-        if (enemy.health <= 0) {
-          removeEnemy(enemy);
-          return { killed: enemy, end };
-        }
-        return { hit: enemy, end };
-      }
-      const car = state.policeCars.find((c) => c.mesh === node);
-      if (car) {
-        car.speed *= 0.7;
-        state.audio.hit();
-        return { hitCar: car, end };
-      }
+      const h = hits[0];
+      end = h.point.clone();
+      const entry = this.targets.find((t) => t.mesh === h.object);
+      if (entry) hitRef = entry.ref;
+    } else {
+      end = this.raycaster.ray.at(COMBAT.pistolRange, new THREE.Vector3());
     }
-    return { end };
+    this._tracer(origin.clone(), end);
+    this.muzzle.position.copy(origin);
+    this.muzzle.intensity = 3.2;
+    return hitRef;
   }
 
-  function enemiesStep(dt, player) {
-    for (const enemy of enemies) {
-      if (enemy.dead) continue;
-      const dx = player.x - enemy.x;
-      const dz = player.z - enemy.z;
-      const dist = Math.hypot(dx, dz);
-      enemy.mesh.rotation.y = Math.atan2(dx, dz);
-      enemy.mesh.userData.armR.rotation.x = -Math.PI / 2;
-      enemy.fireTimer -= dt;
-      if (dist < 55 && enemy.fireTimer <= 0) {
-        enemy.fireTimer = 1.1 + state.rng.range(0, 0.7);
-        const from = new THREE.Vector3(enemy.x, 1.4, enemy.z);
-        const hitChance = enemy.accuracy * Math.max(0.25, 1 - dist / 70);
-        state.audio.enemyShot();
-        if (state.rng.next() < hitChance) {
-          const to = new THREE.Vector3(player.x, 1.2, player.z);
-          spawnTracer(from, to);
-          state.damagePlayer(9 + state.rng.range(0, 6), 'shot');
-        } else {
-          const to = new THREE.Vector3(
-            player.x + state.rng.range(-3, 3), 1.2, player.z + state.rng.range(-3, 3),
-          );
-          spawnTracer(from, to);
-        }
-        muzzleFlash(from);
-      }
+  // An enemy fires at the player; accuracy decides the hit.
+  fireEnemy(from, playerPos, hitChance) {
+    const start = from.clone();
+    start.y = 1.35;
+    const dir = playerPos.clone().sub(start);
+    const d = dir.length();
+    dir.normalize();
+    // Miss: offset the end point.
+    const end = playerPos.clone();
+    end.y = 1.2;
+    if (Math.random() > hitChance) {
+      end.x += (Math.random() - 0.5) * 3;
+      end.z += (Math.random() - 0.5) * 3;
+      end.y += (Math.random() - 0.5) * 1.5;
     }
-    for (let i = tracers.length - 1; i >= 0; i -= 1) {
-      const t = tracers[i];
-      t.userData.life -= dt;
-      t.material.opacity = Math.max(0, t.userData.life / 0.09) * 0.9;
-      if (t.userData.life <= 0) {
-        state.scene.remove(t);
-        tracers.splice(i, 1);
-      }
-    }
-    flashLight.intensity = Math.max(0, flashLight.intensity - dt * 600);
+    this._tracer(start, end, 0xff6a5a);
+    this.muzzle.position.copy(start);
+    this.muzzle.intensity = 2.2;
+    return Math.random() <= hitChance;
   }
 
-  return {
-    enemies,
-    spawnEnemy,
-    playerShoot,
-    enemiesStep,
-    spawnTracer,
-    muzzleFlash,
-    clear() {
-      for (const enemy of [...enemies]) state.scene.remove(enemy.mesh);
-      enemies.length = 0;
-      for (const t of tracers) state.scene.remove(t);
-      tracers.length = 0;
-    },
-  };
+  _tracer(a, b, color = 0xffe9a8) {
+    const geo = new THREE.BufferGeometry().setFromPoints([a, b]);
+    const mat = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.95 });
+    const line = new THREE.Line(geo, mat);
+    this.scene.add(line);
+    this.tracers.push({ line, life: 1 });
+  }
 }
