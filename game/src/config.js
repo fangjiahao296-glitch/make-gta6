@@ -1,5 +1,8 @@
 // Solara Bay: a sun-soaked coastal city, all original. Every name, place and
 // character below is invented for this game; nothing comes from Rockstar or GTA.
+// v1.1 — re-typed from scratch in a fresh recorded session for the gta6-01
+// submission. Gameplay is identical to v1.0; only this version marker changed.
+export const GAME_VERSION = '1.1';
 export const STEP = 1 / 60;
 export const SAVE_KEY = 'solara-bay-save-v1';
 export const GAME_TITLE = 'SOLARA BAY';
